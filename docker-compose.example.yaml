@@ -1,0 +1,25 @@
+# Example stack for Dockge, Portainer or plain `docker compose up -d`.
+# Copy to compose.yaml, then change PLEX_URL, PLEX_TOKEN and the host paths on the left of each volume.
+services:
+  plex-movie-doctor:
+    image: ghcr.io/ssrt33/plex-movie-doctor:latest
+    # build: .                 # use this instead of image: to build from source
+    container_name: plex-movie-doctor
+    restart: unless-stopped
+    ports:
+      - "8688:8688"
+    environment:
+      PLEX_URL: http://192.168.1.10:32400   # your Plex, as this container can reach it
+      PLEX_TOKEN: paste-your-plex-token     # see the README: "Find your Plex token"
+      # LIBRARIES: Movies                   # only these movie libraries (names or ids); empty = all
+      PATH_MAP: /movies=/movies             # Plex's path = this container's path (see README)
+      SCAN_EVERY_HOURS: "12"                # starting value; you can change it on the page
+      NAMING_ID: none                       # none, tmdb or imdb (starting value; change it on the page)
+      PUID: "568"                           # TrueNAS "apps" user
+      PGID: "568"
+      TZ: America/Chicago
+      # NOTIFY_URL: https://ntfy.sh/pick-a-long-random-topic-name
+    volumes:
+      - /path/to/movies:/movies                     # the SAME folder Plex uses for the movie library
+      - /path/to/plex-movie-doctor/trash:/trash     # duplicates and junk go here (outside the library!)
+      - /path/to/plex-movie-doctor/config:/config

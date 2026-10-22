@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0f1115">
+<title>Movie Doctor</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23e9a24a'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%230f1115'/%3E%3Ccircle cx='16' cy='8.5' r='2.6' fill='%230f1115'/%3E%3Ccircle cx='16' cy='23.5' r='2.6' fill='%230f1115'/%3E%3Ccircle cx='8.5' cy='16' r='2.6' fill='%230f1115'/%3E%3Ccircle cx='23.5' cy='16' r='2.6' fill='%230f1115'/%3E%3C/svg%3E">
+<style>
+/* Same design system as abs-library-doctor and audiobook-ripper, so the apps look like a set. */
+:root{
+  color-scheme:dark;
+  --bg:#0f1115; --bg2:#14171d; --panel:#181b22; --panel2:#1d2129; --well:#11141a;
+  --ink:#ece7dd; --muted:#9a968e; --faint:#6b6860; --line:#272b34; --line2:#323743;
+  --accent:#e9a24a; --accent2:#f2c27a; --accent-ink:#1b1206; --accent-soft:rgba(233,162,74,.12); --accent-glow:rgba(233,162,74,.35);
+  --ok:#5fcf93; --ok-soft:rgba(95,207,147,.12); --bad:#f07a6b; --bad-soft:rgba(240,122,107,.12);
+  --busy:#7cb4f0; --busy-soft:rgba(124,180,240,.12);
+  --shadow:0 1px 0 rgba(255,255,255,.03) inset,0 10px 30px -12px rgba(0,0,0,.6);
+  --r:16px;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;min-height:100vh;color:var(--ink);font:15px/1.5 var(--sans);font-feature-settings:"tnum" 1;
+  background:radial-gradient(1100px 500px at 15% -10%,rgba(233,162,74,.08),transparent 60%),
+             radial-gradient(900px 500px at 100% 0,rgba(124,180,240,.05),transparent 60%),var(--bg);
+  background-attachment:fixed;-webkit-font-smoothing:antialiased}
+::selection{background:var(--accent-glow)}
+button,input,select{font:inherit;color:inherit}
+a{color:var(--accent2);text-decoration:none}a:hover{text-decoration:underline}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--line2);border-radius:10px;border:2px solid var(--bg)}
+::-webkit-scrollbar-track{background:transparent}
+
+/* header */
+header{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;
+  padding:12px 24px;border-bottom:1px solid var(--line);background:rgba(15,17,21,.78);backdrop-filter:blur(14px) saturate(1.3)}
+.brand{display:flex;align-items:center;gap:12px;font-weight:700;letter-spacing:-.015em;font-size:17px}
+.brand small{display:block;font-weight:500;font-size:12px;color:var(--muted);letter-spacing:0}
+.brand svg{flex:none;filter:drop-shadow(0 0 10px var(--accent-glow))}
+.drives{display:flex;gap:8px;flex-wrap:wrap}
+.drive{display:flex;align-items:center;gap:9px;padding:5px 6px 5px 12px;border:1px solid var(--line2);border-radius:999px;font-size:13px;background:var(--panel)}
+.drive>span:not(.dot){color:var(--ink)}
+.drive .dot{width:8px;height:8px;border-radius:50%;background:var(--faint);flex:none}
+.drive[data-s=ok] .dot{background:var(--ok);box-shadow:0 0 0 4px var(--ok-soft)}
+.drive[data-s=busy] .dot{background:var(--busy);box-shadow:0 0 0 4px var(--busy-soft);animation:pulse 1.2s infinite}
+.drive[data-s=bad] .dot{background:var(--bad);box-shadow:0 0 0 4px var(--bad-soft)}
+.drive code{font-family:var(--mono);color:var(--muted);font-size:11.5px;background:var(--well);padding:1px 6px;border-radius:6px}
+@keyframes pulse{50%{opacity:.35}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* layout */
+main{max-width:1240px;margin:0 auto;padding:28px 24px 48px;display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:24px;align-items:start}
+@media (max-width:960px){main{grid-template-columns:1fr;padding:16px}header{padding:12px 16px}}
+.col,aside{display:grid;gap:24px;min-width:0}
+.panel{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+.panel>h2{margin:0;padding:14px 18px;font-size:12px;font-weight:650;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);
+  border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px}
+.panel>h2 .count{font-family:var(--mono);letter-spacing:0;color:var(--faint);font-weight:500}
+
+/* hero cue */
+.cue{position:relative;display:flex;align-items:center;gap:20px;padding:24px;border-bottom:1px solid var(--line);
+  background:radial-gradient(600px 180px at 0 0,rgba(233,162,74,.22),transparent 70%),linear-gradient(180deg,rgba(233,162,74,.08),transparent)}
+.cue.busy{background:radial-gradient(600px 180px at 0 0,rgba(124,180,240,.2),transparent 70%),linear-gradient(180deg,rgba(124,180,240,.07),transparent)}
+.cue.ok{background:radial-gradient(600px 180px at 0 0,rgba(95,207,147,.16),transparent 70%),linear-gradient(180deg,rgba(95,207,147,.06),transparent)}
+.cue.bad{background:radial-gradient(600px 180px at 0 0,rgba(240,122,107,.2),transparent 70%),linear-gradient(180deg,rgba(240,122,107,.07),transparent)}
+.cue .big{font-size:30px;font-weight:750;letter-spacing:-.025em;line-height:1.1}
+.cue .sub{color:var(--muted);font-size:14px;margin-top:4px;overflow-wrap:anywhere}
+.cue .disc-ico{flex:none;filter:drop-shadow(0 6px 18px rgba(0,0,0,.5))}
+.cue .bar{height:7px;margin-top:12px}
+@media (max-width:600px){.cue{padding:18px;gap:14px}.cue .big{font-size:24px}.cue .disc-ico{width:48px;height:48px}}
+.bar{height:5px;border-radius:5px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:7px}
+.bar i{display:block;height:100%;border-radius:5px;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .4s}
+.cue.busy .bar i{background-image:linear-gradient(45deg,rgba(255,255,255,.18) 25%,transparent 25% 50%,rgba(255,255,255,.18) 50% 75%,transparent 75%),linear-gradient(90deg,#5d9be0,var(--busy));
+  background-size:16px 16px,100% 100%;animation:stripes .8s linear infinite}
+@keyframes stripes{to{background-position:16px 0,0 0}}
+
+/* sections inside the main panel (like the ripper's disc list) */
+.block{padding:18px 24px 24px}
+.block+.block{border-top:1px solid var(--line)}
+.block h3{font-size:12px;margin:0 0 12px;color:var(--muted);font-weight:650;text-transform:uppercase;letter-spacing:.09em;display:flex;justify-content:space-between}
+.block h3 span:last-child{font-family:var(--mono);text-transform:none;letter-spacing:0;font-weight:500;color:var(--faint)}
+@media (max-width:600px){.block{padding:16px 18px 18px}}
+
+.banners{display:grid;gap:10px;padding:18px 24px 0}
+.banners:empty{display:none}
+.banner{padding:12px 14px;border-radius:12px;font-size:13.5px;border:1px solid;color:var(--ink)}
+.banner.warn{background:var(--accent-soft);border-color:rgba(233,162,74,.35)}
+.banner.bad{background:var(--bad-soft);border-color:rgba(240,122,107,.45)}
+.banner b{display:block;margin-bottom:2px;font-weight:650}
+.banner code{font-family:var(--mono);font-size:12px;background:var(--well);padding:1px 6px;border-radius:6px}
+
+/* issue groups */
+.group{border:1px solid var(--line);border-radius:12px;background:var(--well);margin-bottom:10px;transition:border-color .15s}
+.group:hover{border-color:var(--line2)}
+.group-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;cursor:pointer;user-select:none}
+.group-head .t{font-weight:600;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.group-head .about{color:var(--muted);font-size:12.5px;margin-top:2px;font-weight:400}
+.group-head .caret{transition:transform .15s;color:var(--faint);flex:none}
+.group.open .caret{transform:rotate(90deg)}
+.group-body{display:none;padding:0 14px 14px;gap:8px}
+.group.open .group-body{display:grid}
+.n{min-width:26px;height:26px;padding:0 6px;border-radius:999px;display:inline-grid;place-items:center;font:700 12.5px var(--mono);color:var(--accent);
+  background:radial-gradient(circle,var(--well) 0 4px,var(--accent-soft) 5px)}
+.tag{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.06em}
+.tag::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.tag.done{background:var(--ok-soft);color:var(--ok)}
+.tag.failed{background:var(--bad-soft);color:var(--bad)}
+.tag.busy{background:var(--busy-soft);color:var(--busy)}
+.tag.you{background:var(--accent-soft);color:var(--accent)}
+.tag.off{background:rgba(255,255,255,.05);color:var(--faint)}
+
+.issue{border:1px solid var(--line);border-radius:10px;background:rgba(0,0,0,.18);padding:12px;display:grid;gap:10px}
+.issue .top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.issue .sum{font-weight:600;overflow-wrap:anywhere}
+.issue .acts{display:flex;gap:6px;flex:none}
+.note{font-size:12.5px;color:var(--accent2)}
+.changes{display:grid;grid-template-columns:auto minmax(0,1fr) auto minmax(0,1fr);gap:4px 10px;font-size:13.5px;align-items:center}
+.changes .f{font-size:11.5px;font-weight:600;color:var(--muted);letter-spacing:.02em}
+.changes .b{color:var(--faint);text-decoration:line-through;text-decoration-color:rgba(240,122,107,.5);overflow-wrap:anywhere}
+.changes .a{color:var(--ink);overflow-wrap:anywhere}
+.changes .arr{color:var(--faint)}
+.changes img{width:72px;height:72px;object-fit:cover;border-radius:8px;box-shadow:0 8px 20px -8px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.06)}
+@media (max-width:600px){.changes{grid-template-columns:1fr}.changes .arr{display:none}.changes .f{margin-top:6px}}
+.plan{margin:0;padding:10px 12px;list-style:none;font:11.5px/1.6 var(--mono);color:var(--faint);background:var(--well);border:1px solid var(--line);border-radius:8px;display:grid;gap:2px}
+.plan li{overflow-wrap:anywhere}
+.plan li:last-child{color:var(--ink)}
+.copies{display:grid;gap:6px}
+.copy{display:grid;grid-template-columns:auto 70px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 10px;border-radius:8px;
+  border:1px solid var(--line);background:var(--well);cursor:pointer;font-size:13px;transition:border-color .15s}
+.copy:hover{border-color:var(--line2)}
+.copy input{accent-color:var(--accent);margin:0}
+.copy .what{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
+.copy.keep{border-color:rgba(233,162,74,.45);background:var(--accent-soft)}
+.copy.keep .what{color:var(--accent)}
+.copy .rel{font:12px var(--mono);overflow-wrap:anywhere}
+.copy .tags{display:flex;gap:4px}
+@media (max-width:600px){.copy{grid-template-columns:auto minmax(0,1fr)}.copy .what{display:none}.copy .tags{grid-column:2}}
+details.more summary{cursor:pointer;color:var(--muted);font-size:13px;list-style:none}
+details.more summary::-webkit-details-marker{display:none}
+details.more summary::before{content:"▸ ";color:var(--faint)}
+details.more[open] summary::before{content:"▾ "}
+details.more+details.more{margin-top:12px}
+.info{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0 6px 14px;border-top:1px dashed var(--line);font-size:13.5px}
+details.more[open] summary{margin-bottom:6px}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2);
+  cursor:pointer;font-weight:600;font-size:13.5px;white-space:nowrap;transition:border-color .15s,background .15s,transform .05s,filter .15s}
+.btn:hover{border-color:var(--faint);background:#232833}
+.btn:active{transform:translateY(1px)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn.primary{background:linear-gradient(180deg,var(--accent2),var(--accent));border-color:transparent;color:var(--accent-ink);
+  box-shadow:0 6px 20px -6px var(--accent-glow),0 1px 0 rgba(255,255,255,.35) inset}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.small{padding:5px 10px;font-size:12.5px;border-radius:8px}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn.ghost:hover{background:var(--panel2);color:var(--ink)}
+.btn:disabled{opacity:.4;cursor:default;box-shadow:none;filter:none}
+.spin{width:13px;height:13px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .7s linear infinite;display:inline-block}
+
+
+/* history (like the ripper's book list) */
+.lib-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:14px 18px;border-bottom:1px solid var(--line);align-items:start;transition:background .15s}
+.lib-item:hover{background:rgba(255,255,255,.02)}
+.lib-item:last-child{border-bottom:0}
+.lib-item .t{font-weight:600;line-height:1.3;font-size:14px;overflow-wrap:anywhere}
+.lib-item .a{font-size:12.5px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px}
+.lib-item .act{grid-row:1/3;grid-column:2;align-self:center}
+.lib-item.undone .t{color:var(--faint);text-decoration:line-through}
+.lib-item.more{display:block;padding:10px 12px}
+.confirm{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--accent2);flex-wrap:wrap;justify-content:flex-end}
+
+/* settings */
+.settings{padding:4px 18px 18px;font-size:13px;color:var(--muted);display:grid;gap:2px}
+.settings .lib{display:flex;flex-direction:column;gap:4px;padding:12px 14px;margin:12px 0 6px;border:1px solid var(--line);border-radius:10px;background:var(--well)}
+.settings .lib .path{color:var(--ink)}
+.path{font:11.5px var(--mono);color:var(--faint);word-break:break-all}
+.sw{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;cursor:pointer;border-bottom:1px solid var(--line)}
+.sw span{display:flex;flex-direction:column}
+.sw b{color:var(--ink);font-weight:600;font-size:14px}
+.sw small{font-size:12px;color:var(--muted)}
+.sw input{position:absolute;opacity:0;pointer-events:none}
+.sw i{flex:none;width:40px;height:23px;border-radius:999px;background:var(--line2);position:relative;transition:background .15s,box-shadow .15s}
+.sw i::after{content:"";position:absolute;top:3px;left:3px;width:17px;height:17px;border-radius:50%;background:#d9d4ca;box-shadow:0 1px 3px rgba(0,0,0,.4);transition:transform .18s cubic-bezier(.3,1.4,.6,1)}
+.sw input:checked+i{background:var(--accent);box-shadow:0 0 14px -2px var(--accent-glow)}
+.sw input:checked+i::after{transform:translateX(17px);background:#fff8ec}
+.sw input:focus-visible+i{outline:2px solid var(--accent);outline-offset:2px}
+.sw.small{padding:7px 0}
+.sw.small b{font-size:13px;font-weight:500}
+.sw.small i{width:34px;height:20px}
+.sw.small i::after{width:14px;height:14px}
+.sw.small input:checked+i::after{transform:translateX(14px)}
+.sw.dim{opacity:.45;cursor:default}
+.sub-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;margin:18px 0 8px;color:var(--faint)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.f{display:flex;flex-direction:column;gap:5px}
+.f label{font-size:11.5px;font-weight:600;color:var(--muted);letter-spacing:.02em}
+.f select{width:100%;padding:9px 12px;font-size:14px;border:1px solid var(--line);border-radius:10px;background:var(--well);outline:none;
+  appearance:none;-webkit-appearance:none;padding-right:32px;cursor:pointer;transition:border-color .15s,box-shadow .15s;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' fill='none' stroke='%239a968e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 11px center}
+.f select:hover{border-color:var(--line2)}
+.f select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+select option{background:var(--panel)}
+.saved{margin-top:12px;font-size:12px;color:var(--faint)}
+
+.empty{padding:26px;text-align:center;color:var(--muted);border:1.5px dashed var(--line2);border-radius:12px;background:rgba(0,0,0,.12)}
+.pad{padding:18px}
+.muted{color:var(--muted)} .faint{color:var(--faint)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,8px);background:var(--panel2);color:var(--ink);border:1px solid var(--line2);
+  padding:11px 18px;border-radius:12px;font-size:14px;box-shadow:0 18px 40px -10px rgba(0,0,0,.7);opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;max-width:calc(100% - 32px);z-index:20}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.bad{border-color:rgba(240,122,107,.5)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* movie doctor extras */
+.gtitle{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);margin:18px 0 8px}
+.gtitle:first-child{margin-top:0}
+.copy{grid-template-columns:auto 70px minmax(0,1fr)}
+.copy .tags{grid-column:3;flex-wrap:wrap}
+.copy .tag{font-size:10px;padding:2px 7px}
+.copy .tag::before{display:none}
+.review{font-size:12.5px;color:var(--muted);display:flex;gap:8px;align-items:center}
+.review b{color:var(--ink);font-weight:600}
+.lib-item details.more{grid-column:1/-1;margin-top:4px}
+.lib-item .plan{margin-top:6px}
+.pill-safe{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;margin:12px 0 4px;border:1px solid rgba(95,207,147,.3);background:var(--ok-soft);border-radius:10px;color:var(--ink);font-size:13px}
+.pill-safe svg{flex:none;margin-top:2px}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg width="34" height="34" viewBox="0 0 32 32" aria-hidden="true">
+      <defs><linearGradient id="bg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6cf8e"/><stop offset="1" stop-color="#d8862f"/></linearGradient></defs>
+      <circle cx="16" cy="16" r="15" fill="url(#bg1)"/>
+      <g fill="#0f1115"><circle cx="16" cy="16" r="2.6"/><circle cx="16" cy="8.4" r="2.8"/><circle cx="16" cy="23.6" r="2.8"/><circle cx="8.4" cy="16" r="2.8"/><circle cx="23.6" cy="16" r="2.8"/></g></svg>
+    <div>Movie Doctor<small>Tidies your Plex movie library</small></div>
+  </div>
+  <div class="drives"><div class="drive" id="statusPill" data-s="">
+    <span class="dot"></span><code id="statusCode">Plex</code><span id="statusText">Loading…</span>
+    <button class="btn small" id="scanBtn" type="button">Scan now</button>
+  </div></div>
+</header>
+
+<main>
+  <div class="col">
+    <section class="panel">
+      <div id="cue"></div>
+      <div class="banners" id="banners"></div>
+      <div class="block">
+        <h3><span>To review</span><span id="needCount"></span></h3>
+        <div id="groups"></div>
+      </div>
+      <div class="block" id="infoBlock" hidden>
+        <h3><span>For your attention</span><span id="infoCount"></span></h3>
+        <div id="infoList"></div>
+      </div>
+    </section>
+  </div>
+
+  <aside>
+    <section class="panel">
+      <h2>History <span class="count" id="histCount"></span></h2>
+      <div id="history"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Settings</h2>
+      <div class="settings" id="settings"></div>
+    </section>
+
+    <section class="panel" id="ignoredPanel" hidden>
+      <h2>Skipped <span class="count" id="ignCount"></span></h2>
+      <div id="ignored"></div>
+    </section>
+  </aside>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function localStorageGet(k){ try { return localStorage.getItem(k); } catch { return null; } }
+function localStorageSet(k, v){ try { localStorage.setItem(k, v); } catch {} }
+let S = null, openGroups = new Set(JSON.parse(localStorageGet("openGroups") || "[]")), pending = new Set(),
+    confirming = null, showAllHist = false, keepChoice = {};
+
+async function api(method, path, body){
+  const r = await fetch(path, {method, headers: body ? {"Content-Type": "application/json"} : {}, body: body ? JSON.stringify(body) : undefined});
+  let data = {}; try { data = await r.json(); } catch {}
+  if (!r.ok) { const e = new Error(data.error || r.statusText); e.data = data; e.status = r.status; throw e; }
+  return data;
+}
+
+let toastT;
+function toast(msg, bad){
+  const t = $("#toast"); t.textContent = msg; t.className = "toast show" + (bad ? " bad" : "");
+  clearTimeout(toastT); toastT = setTimeout(() => t.className = "toast", bad ? 6000 : 3000);
+}
+
+function ago(ts){
+  if (!ts) return "never";
+  const s = Math.max(0, Date.now() / 1000 - ts);
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.floor(s / 60) + " min ago";
+  if (s < 86400) return Math.floor(s / 3600) + " h ago";
+  return Math.floor(s / 86400) + " d ago";
+}
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+const caret = '<svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg>';
+
+// A film reel. Turns while scanning, check mark in the hub when all is well.
+function reelIcon(cls){
+  const glint = {busy: "#7cb4f0", ok: "#5fcf93", bad: "#f07a6b"}[cls] || "#f2c27a";
+  const holes = [0, 72, 144, 216, 288].map(a => {
+    const r = a * Math.PI / 180;
+    return `<circle cx="${(16 + 8.6 * Math.sin(r)).toFixed(2)}" cy="${(16 - 8.6 * Math.cos(r)).toFixed(2)}" r="3.4" fill="var(--bg)" stroke="#fff" stroke-opacity=".06"/>`;
+  }).join("");
+  return `<svg class="disc-ico" width="64" height="64" viewBox="0 0 32 32" aria-hidden="true" ${cls === "busy" ? 'style="animation:spin 2.4s linear infinite"' : ""}>
+    <defs><radialGradient id="rlg" cx="50%" cy="50%" r="50%"><stop offset=".3" stop-color="#2a2f3a"/><stop offset="1" stop-color="#3b4150"/></radialGradient>
+    <linearGradient id="rls" x1="0" y1="0" x2="1" y2="1"><stop offset=".3" stop-color="${glint}" stop-opacity="0"/><stop offset=".5" stop-color="${glint}" stop-opacity=".5"/><stop offset=".7" stop-color="${glint}" stop-opacity="0"/></linearGradient></defs>
+    <circle cx="16" cy="16" r="15.5" fill="url(#rlg)"/><circle cx="16" cy="16" r="15.5" fill="url(#rls)"/>${holes}
+    <circle cx="16" cy="16" r="3.2" fill="#1d2129" stroke="#fff" stroke-opacity=".12"/>
+    ${cls === "ok" ? `<path d="M14.6 16.1l1 1 2-2.1" fill="none" stroke="${glint}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>` : `<circle cx="16" cy="16" r="1.1" fill="${glint}"/>`}</svg>`;
+}
+
+function renderCue(fixable){
+  let c;
+  const stats = [S.movies ? plural(S.movies, "movie") + " checked" : "", S.last_scan ? `last check ${ago(S.last_scan)}` : ""].filter(Boolean).join(" · ");
+  if (!S.configured) c = {cls: "", big: "Connect to Plex", sub: "Set PLEX_URL and PLEX_TOKEN on this container, then restart it."};
+  else if (S.scan.running) c = {cls: "busy", big: S.scan.step && S.scan.step.startsWith("Fixing") ? "Working on it" : S.scan.step && S.scan.step.startsWith("Undoing") ? "Putting it back" : "Checking your movies", sub: S.scan.step || "Working…", bar: true};
+  else if (S.scan.error) c = {cls: "bad", big: "The last check didn't finish", sub: S.scan.error};
+  else if (!S.last_scan) c = {cls: "", big: "Ready for a first check", sub: "Press Scan now, or wait a moment – it starts on its own."};
+  else if (fixable) c = {cls: "", big: `${plural(fixable, "thing")} to review`, sub: stats + " · nothing changes until you press Fix"};
+  else c = {cls: "ok", big: "All tidy", sub: stats || "Nothing to review right now."};
+  document.title = S.configured && !S.scan.running && fixable ? `${fixable} to review · Movie Doctor` : "Movie Doctor";
+  $("#cue").innerHTML = `<div class="cue ${c.cls}">${reelIcon(c.cls)}
+    <div style="flex:1;min-width:0"><div class="big">${esc(c.big)}</div><div class="sub">${esc(c.sub)}</div>
+    ${c.bar ? `<div class="bar"><i style="width:100%"></i></div>` : ""}</div></div>`;
+}
+
+function renderChanges(ch){
+  if (!ch.length) return "";
+  return `<div class="changes">${ch.map(c => c.image
+    ? `<div class="f">${esc(c.field)}</div><div class="b">${esc(c.before)}</div><div class="arr">→</div><div class="a"><img src="${esc(c.after)}" alt="Plex's poster" loading="lazy" style="width:64px;height:96px"></div>`
+    : `<div class="f">${esc(c.field)}</div><div class="b">${esc(c.before)}</div><div class="arr">→</div><div class="a">${esc(c.after)}</div>`).join("")}</div>`;
+}
+
+function renderCopies(i){
+  const pick = keepChoice[i.id] || i.copies[0].id;
+  const going = i.copies.filter(c => c.id !== pick).flatMap(c => c.plan);
+  return `<div class="copies" role="radiogroup" aria-label="Which copy to keep">${i.copies.map((c, n) => `
+    <label class="copy${c.id === pick ? " keep" : ""}">
+      <input type="radio" name="keep-${i.id}" value="${c.id}" data-keep="${i.id}" ${c.id === pick ? "checked" : ""}>
+      <span class="what">${c.id === pick ? "Keep" : "To trash"}</span>
+      <span class="rel">${esc(c.rel)}</span>
+      <span class="tags">${n === 0 ? '<span class="tag done">best</span>' : ""}${c.tags.map(t => `<span class="tag off">${esc(t)}</span>`).join("")}${c.edition ? `<span class="tag you">${esc(c.edition)}</span>` : ""}${c.progress ? '<span class="tag busy">part-watched</span>' : ""}</span>
+    </label>`).join("")}</div>
+    <ul class="plan">${going.map(p => `<li>${esc(p)}</li>`).join("")}</ul>`;
+}
+
+function renderIssue(i){
+  const busy = pending.has(i.id);
+  return `<div class="issue" data-id="${i.id}">
+    <div class="top"><div class="sum">${esc(i.summary)}</div>
+      <div class="acts">
+        <button class="btn small ghost" data-ignore="${i.id}" ${busy ? "disabled" : ""}>Skip</button>
+        <button class="btn small primary" data-fix="${i.id}" ${busy || S.scan.running || (S.kinds[i.kind].moves_files && !S.can_move) ? "disabled" : ""}>${busy ? '<span class="spin"></span> Fixing' : "Fix"}</button>
+      </div></div>
+    ${i.note ? `<div class="note">${esc(i.note)}</div>` : ""}
+    ${renderChanges(i.changes)}
+    ${i.copies ? renderCopies(i) : i.plan.length ? `<ul class="plan">${i.plan.map(p => `<li>${esc(p)}</li>`).join("")}</ul>` : ""}
+  </div>`;
+}
+
+function renderHeader(){
+  const pill = $("#statusPill"), st = $("#statusText"), code = $("#statusCode");
+  code.textContent = S.server?.version ? `Plex ${S.server.version}` : "Plex";
+  if (!S.configured) { pill.dataset.s = "bad"; st.textContent = "Not connected"; }
+  else if (S.scan.running) { pill.dataset.s = "busy"; st.textContent = "Working…"; }
+  else if (S.scan.error) { pill.dataset.s = "bad"; st.textContent = "Last check failed"; }
+  else { pill.dataset.s = "ok"; st.textContent = `Checked ${ago(S.last_scan)}`; }
+  const btn = $("#scanBtn"); btn.disabled = S.scan.running || !S.configured;
+  btn.innerHTML = S.scan.running ? '<span class="spin"></span> Busy' : "Scan now";
+}
+
+function renderBanners(){
+  const b = [];
+  if (S.configured && S.last_scan && S.movies && S.stale >= S.movies)
+    b.push(`<div class="banner bad"><b>Can't see your movie files</b>Plex lists ${S.movies} movies, but none of their files exist inside this container. Mount the same movie folder Plex uses and set <code>PATH_MAP</code> to <code>&lt;path Plex sees&gt;=&lt;path this container sees&gt;</code>.</div>`);
+  else if (S.stale) b.push(`<div class="banner warn"><b>${plural(S.stale, "movie")} skipped</b>Plex lists files for these that aren't there right now (usually Plex hasn't caught up with a change yet). They'll be checked again next time.</div>`);
+  if (S.configured && !S.can_move) b.push(`<div class="banner warn"><b>Fixes that move files are off</b>${esc(S.can_move_reason)} Saving artwork and NFOs still works.</div>`);
+  else if (S.configured && !S.trash_mounted) b.push(`<div class="banner warn"><b>The trash folder isn't a mounted volume</b>Anything moved there would vanish when the container is rebuilt. Mount a folder at <code>/trash</code>.</div>`);
+  $("#banners").innerHTML = b.join("");
+}
+
+function renderIssues(fixable, info){
+  $("#needCount").textContent = fixable.length || "";
+  const byKind = {};
+  fixable.forEach(i => (byKind[i.kind] ||= []).push(i));
+  const order = Object.keys(S.kinds);
+  const kinds = Object.keys(byKind).sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  let html = "", lastGroup = null;
+  for (const k of kinds) {
+    const K = S.kinds[k], list = byKind[k], isOpen = openGroups.has(k), canBulk = k === "artwork" && list.length > 1;
+    if (K.group !== lastGroup) { html += `<div class="gtitle">${esc(K.group)}</div>`; lastGroup = K.group; }
+    html += `<div class="group${isOpen ? " open" : ""}" data-kind="${k}">
+      <div class="group-head" data-toggle="${k}" role="button" tabindex="0" aria-expanded="${isOpen}">
+        <div><div class="t">${caret}${esc(K.label)} <span class="n">${list.length}</span>${K.moves_files ? '<span class="tag busy">moves files</span>' : '<span class="tag off">adds files</span>'}</div>
+        <div class="about">${esc(K.about)}</div></div>
+        ${canBulk ? `<button class="btn small" data-fixkind="${k}" ${S.scan.running ? "disabled" : ""}>Save all ${list.length}</button>` : ""}
+      </div>
+      <div class="group-body">${list.map(renderIssue).join("")}</div>
+    </div>`;
+  }
+  $("#groups").innerHTML = html || `<div class="empty">${S.last_scan ? "Nothing to review. Your movie library looks tidy."
+      : S.configured ? "Nothing yet – press <b>Scan now</b> to check your movies." : "Connect to Plex first."}</div>`;
+
+  $("#infoBlock").hidden = !info.length;
+  $("#infoCount").textContent = info.length || "";
+  const infoBy = {};
+  info.forEach(i => (infoBy[i.kind] ||= []).push(i));
+  $("#infoList").innerHTML = Object.entries(infoBy).map(([k, list]) => `<details class="more"${openGroups.has("info:" + k) ? " open" : ""} data-info="${k}">
+    <summary>${esc(S.kinds[k]?.label || k)} – ${plural(list.length, "movie")}<br><span class="faint">${esc(S.kinds[k]?.about || "")}</span></summary>
+    ${list.map(i => `<div class="info"><span>${esc(i.summary)}${i.note ? `<br><span class="faint" style="font-size:12.5px">${esc(i.note)}</span>` : ""}</span><button class="btn small ghost" data-ignore="${i.id}">Dismiss</button></div>`).join("")}
+  </details>`).join("");
+}
+
+function renderHistory(){
+  $("#histCount").textContent = S.history.length || "";
+  const shown = showAllHist ? S.history.slice(0, 200) : S.history.slice(0, 12);
+  $("#history").innerHTML = S.history.length ? shown.map(h => `<div class="lib-item${h.undone ? " undone" : ""}">
+      <div class="t">${esc(h.summary)}</div>
+      <div class="act">${h.undone ? ""
+        : confirming === h.id ? `<span class="confirm">Undo what's possible? <button class="btn small" data-force="${h.id}">Yes</button><button class="btn small ghost" data-cancel>No</button></span>`
+        : `<button class="btn small ghost" data-undo="${h.id}" ${S.scan.running ? "disabled" : ""}>Undo</button>`}</div>
+      <div class="a">${h.undone ? '<span class="tag off">undone</span>' : '<span class="tag you">fixed</span>'}
+        <span>${esc(S.kinds[h.kind]?.label || h.kind)} · ${esc(ago(h.at))}</span></div>
+      ${h.plan && h.plan.length ? `<details class="more"><summary>What was done</summary><ul class="plan">${h.plan.map(p => `<li>${esc(p)}</li>`).join("")}</ul></details>` : ""}
+    </div>`).join("") + (S.history.length > 12 ? `<div class="lib-item more"><button class="btn small ghost" data-morehist>${showAllHist ? "Show fewer" : `Show all ${S.history.length}`}</button></div>` : "")
+    : `<div class="pad"><div class="empty">Fixes you make show up here, each with an Undo.</div></div>`;
+
+  const ign = Object.entries(S.ignored || {});
+  $("#ignoredPanel").hidden = !ign.length;
+  $("#ignCount").textContent = ign.length || "";
+  $("#ignored").innerHTML = ign.map(([id, v]) => `<div class="lib-item"><div class="t">${esc(v.summary)}</div>
+    <div class="act"><button class="btn small ghost" data-unignore="${id}">Restore</button></div>
+    <div class="a"><span>${esc(v.reason || "Skipped")} · ${esc(ago(v.at))}</span></div></div>`).join("");
+}
+
+const EVERY = [[1, "Every hour"], [3, "Every 3 hours"], [6, "Every 6 hours"], [12, "Every 12 hours"], [24, "Once a day"], [168, "Once a week"]];
+const IDS = [["none", "Title (Year)"], ["tmdb", "Title (Year) {tmdb-…}"], ["imdb", "Title (Year) {imdb-…}"]];
+function renderSettings(){
+  const s = S.settings, el = $("#settings");
+  if (!el.dataset.built) {
+    el.dataset.built = "1";
+    el.innerHTML = `
+      <div class="pill-safe"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>
+        <span>Review only. Scans never change anything; each fix waits for you, can be undone, and nothing is deleted.</span></div>
+      <div class="lib">Plex <span class="path" id="plexUrl"></span><span class="path" id="plexLibs"></span></div>
+      <div class="sub-h">Naming</div>
+      <div class="f"><label for="namingId">Folder names</label><select id="namingId"></select></div>
+      <label class="sw" style="margin-top:6px"><span><b>Keep 4K and HD copies</b><small>Different resolutions of one movie are versions, not duplicates.</small></span>
+        <input type="checkbox" id="keepVersions"><i></i></label>
+      <div class="sub-h">Schedule</div>
+      <div class="grid2"><div class="f"><label for="every">Check the library</label><select id="every"></select></div></div>
+      <div class="saved">Changes save automatically.</div>`;
+  }
+  $("#plexUrl").textContent = S.plex_url || "";
+  $("#plexLibs").textContent = (S.libraries || []).length ? "Libraries: " + S.libraries.map(l => `${l.name} (${l.folders.join(", ")})`).join("; ") : "";
+  $("#keepVersions").checked = !!s.keep_versions;
+  const nid = $("#namingId");
+  if (document.activeElement !== nid) nid.innerHTML = IDS.map(([v, t]) => `<option value="${v}"${v === s.naming_id ? " selected" : ""}>${esc(t)}</option>`).join("");
+  const sel = $("#every");
+  if (document.activeElement !== sel) {
+    const cur = Number(s.scan_every_hours);
+    const opts = EVERY.some(([v]) => v === cur) ? EVERY : [...EVERY, [cur, `Every ${cur} hours`]].sort((a, b) => a[0] - b[0]);
+    sel.innerHTML = opts.map(([v, t]) => `<option value="${v}"${v === cur ? " selected" : ""}>${t}</option>`).join("");
+  }
+}
+
+function render(){
+  if (!S) return;
+  const open = S.issues.filter(i => !i.ignored);
+  const fixable = open.filter(i => i.fix), info = open.filter(i => !i.fix);
+  renderHeader(); renderCue(fixable.length); renderBanners();
+  renderIssues(fixable, info); renderHistory(); renderSettings();
+}
+
+let pollT;
+async function refresh(){
+  clearTimeout(pollT);
+  try { S = await api("GET", "/api/state"); render(); }
+  catch (e) { $("#statusPill").dataset.s = "bad"; $("#statusText").textContent = "Can't reach the app"; }
+  pollT = setTimeout(refresh, S && (S.scan.running || pending.size) ? 2000 : 15000);
+}
+
+document.addEventListener("click", async e => {
+  const t = e.target.closest("button,[data-toggle]");
+  if (!t) return;
+  const d = t.dataset;
+  try {
+    if (d.toggle !== undefined && !e.target.closest("button")) {
+      openGroups.has(d.toggle) ? openGroups.delete(d.toggle) : openGroups.add(d.toggle);
+      localStorageSet("openGroups", JSON.stringify([...openGroups])); render();
+    } else if (t.id === "scanBtn") {
+      await api("POST", "/api/scan"); toast("Checking your movies…"); setTimeout(refresh, 400);
+    } else if (d.fix) {
+      pending.add(d.fix); render();
+      try { await api("POST", `/api/issues/${d.fix}/fix`, keepChoice[d.fix] ? {keep: keepChoice[d.fix]} : {}); delete keepChoice[d.fix]; toast("Done. It's in History if you want it back."); }
+      finally { pending.delete(d.fix); }
+      refresh();
+    } else if (d.fixkind) {
+      t.disabled = true; t.innerHTML = '<span class="spin"></span> Saving';
+      const r = await api("POST", `/api/issues/fix-kind/${d.fixkind}`);
+      toast(r.failed.length ? `Saved ${r.fixed}; ${r.failed.length} skipped (changed since the check).` : `Saved ${r.fixed}.`, r.failed.length > 0);
+      refresh();
+    } else if (d.ignore) {
+      await api("POST", `/api/issues/${d.ignore}/ignore`, {on: true}); refresh();
+    } else if (d.unignore) {
+      await api("POST", `/api/issues/${d.unignore}/ignore`, {on: false}); toast("Restored – it'll show again after the next check."); refresh();
+    } else if (d.undo || d.force) {
+      const id = d.undo || d.force;
+      t.disabled = true; t.innerHTML = '<span class="spin"></span>';
+      try { await api("POST", `/api/history/${id}/undo`, {force: !!d.force}); confirming = null; toast("Undone."); }
+      catch (err) { if (err.data?.can_force) { confirming = id; toast(err.message, true); } else throw err; }
+      refresh();
+    } else if (d.morehist !== undefined) {
+      showAllHist = !showAllHist; render();
+    } else if (d.cancel !== undefined) {
+      confirming = null; render();
+    }
+  } catch (err) { toast(err.message, true); refresh(); }
+});
+document.addEventListener("toggle", e => {
+  const k = e.target.dataset?.info;
+  if (!k) return;
+  e.target.open ? openGroups.add("info:" + k) : openGroups.delete("info:" + k);
+  localStorageSet("openGroups", JSON.stringify([...openGroups]));
+}, true);
+document.addEventListener("keydown", e => {
+  if ((e.key === "Enter" || e.key === " ") && e.target.dataset?.toggle) { e.preventDefault(); e.target.click(); }
+});
+document.addEventListener("change", async e => {
+  const t = e.target;
+  if (t.dataset.keep) { keepChoice[t.dataset.keep] = t.value; render(); return; }
+  try {
+    if (t.id === "every") S.settings = await api("POST", "/api/settings", {scan_every_hours: Number(t.value)});
+    else if (t.id === "namingId") { S.settings = await api("POST", "/api/settings", {naming_id: t.value}); toast("Saved. Checking again with the new names…"); render(); return; }
+    else if (t.id === "keepVersions") { S.settings = await api("POST", "/api/settings", {keep_versions: t.checked}); toast("Saved. Checking again…"); render(); return; }
+    else return;
+    render(); toast("Saved.");
+  } catch (err) { toast(err.message, true); }
+});
+refresh();
+</script>
+</body>
+</html>
