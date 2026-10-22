@@ -394,7 +394,7 @@ function renderBanners(){
     const sm = S.suggest_map;
     b.push(`<div class="banner bad"><b>Can't see your movie files</b>Plex lists ${S.movies} movies, but their files aren't where this container looks.
       ${S.missing_example ? `Plex has them at paths like <code>${esc(S.missing_example)}</code>.` : ""}
-      ${sm ? `<br><br>Found them: set this in the stack and redeploy:<br><code>PATH_MAP: ${esc(sm.map)}</code>`
+      ${sm ? `<br><br>Found them: set this in the stack and redeploy:<br><code>PATH_MAP: ${esc(sm.map)}</code><br>This container is running with <code>PATH_MAP: ${esc(S.path_map)}</code> right now.`
            : `<br><br>Mount the same movie folder Plex uses, and set <code>PATH_MAP</code> to <code>&lt;start of Plex's path&gt;=&lt;where it's mounted here&gt;</code>. Current setting: <code>${esc(S.path_map)}</code>.`}</div>`);
   }
   else if (S.stale) b.push(`<div class="banner warn"><b>${plural(S.stale, "movie")} skipped</b>Plex lists files for these that aren't there right now (usually Plex hasn't caught up with a change yet). They'll be checked again next time.</div>`);
