@@ -326,6 +326,7 @@ function reelIcon(cls){
     ${cls === "ok" ? `<path d="M14.6 16.1l1 1 2-2.1" fill="none" stroke="${glint}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>` : `<circle cx="16" cy="16" r="1.1" fill="${glint}"/>`}</svg>`;
 }
 
+const blind = () => S.configured && S.last_scan && S.movies && S.stale >= S.movies / 2;
 function renderCue(fixable){
   let c;
   const stats = [S.movies ? plural(S.movies, "movie") + " checked" : "", S.last_scan ? `last check ${ago(S.last_scan)}` : ""].filter(Boolean).join(" · ");
@@ -333,6 +334,7 @@ function renderCue(fixable){
   else if (S.scan.running) c = {cls: "busy", big: S.scan.step && S.scan.step.startsWith("Fixing") ? "Working on it" : S.scan.step && S.scan.step.startsWith("Undoing") ? "Putting it back" : "Checking your movies", sub: S.scan.step || "Working…", bar: true};
   else if (S.scan.error) c = {cls: "bad", big: "The last check didn't finish", sub: S.scan.error};
   else if (!S.last_scan) c = {cls: "", big: "Ready for a first check", sub: "Press Scan now, or wait a moment – it starts on its own."};
+  else if (blind()) c = {cls: "bad", big: "Can't see your movie files", sub: S.suggest_map ? "Found the fix – see below." : "PATH_MAP or the movie volume needs changing – see below."};
   else if (fixable) c = {cls: "", big: `${plural(fixable, "thing")} to review`, sub: stats + " · nothing changes until you press Fix"};
   else c = {cls: "ok", big: "All tidy", sub: stats || "Nothing to review right now."};
   document.title = S.configured && !S.scan.running && fixable ? `${fixable} to review · Movie Doctor` : "Movie Doctor";
@@ -388,8 +390,13 @@ function renderHeader(){
 
 function renderBanners(){
   const b = [];
-  if (S.configured && S.last_scan && S.movies && S.stale >= S.movies)
-    b.push(`<div class="banner bad"><b>Can't see your movie files</b>Plex lists ${S.movies} movies, but none of their files exist inside this container. Mount the same movie folder Plex uses and set <code>PATH_MAP</code> to <code>&lt;path Plex sees&gt;=&lt;path this container sees&gt;</code>.</div>`);
+  if (blind()) {
+    const sm = S.suggest_map;
+    b.push(`<div class="banner bad"><b>Can't see your movie files</b>Plex lists ${S.movies} movies, but their files aren't where this container looks.
+      ${S.missing_example ? `Plex has them at paths like <code>${esc(S.missing_example)}</code>.` : ""}
+      ${sm ? `<br><br>Found them: set this in the stack and redeploy:<br><code>PATH_MAP: ${esc(sm.map)}</code>`
+           : `<br><br>Mount the same movie folder Plex uses, and set <code>PATH_MAP</code> to <code>&lt;start of Plex's path&gt;=&lt;where it's mounted here&gt;</code>. Current setting: <code>${esc(S.path_map)}</code>.`}</div>`);
+  }
   else if (S.stale) b.push(`<div class="banner warn"><b>${plural(S.stale, "movie")} skipped</b>Plex lists files for these that aren't there right now (usually Plex hasn't caught up with a change yet). They'll be checked again next time.</div>`);
   if (S.configured && !S.can_move) b.push(`<div class="banner warn"><b>Fixes that move files are off</b>${esc(S.can_move_reason)} Saving artwork and NFOs still works.</div>`);
   else if (S.configured && !S.trash_mounted) b.push(`<div class="banner warn"><b>The trash folder isn't a mounted volume</b>Anything moved there would vanish when the container is rebuilt. Mount a folder at <code>/trash</code>.</div>`);
@@ -415,7 +422,8 @@ function renderIssues(fixable, info){
       <div class="group-body">${list.map(renderIssue).join("")}</div>
     </div>`;
   }
-  $("#groups").innerHTML = html || `<div class="empty">${S.last_scan ? "Nothing to review. Your movie library looks tidy."
+  $("#groups").innerHTML = html || `<div class="empty">${blind() ? "Nothing can be checked until the movie files are visible."
+      : S.last_scan ? "Nothing to review. Your movie library looks tidy."
       : S.configured ? "Nothing yet – press <b>Scan now</b> to check your movies." : "Connect to Plex first."}</div>`;
 
   $("#infoBlock").hidden = !info.length;

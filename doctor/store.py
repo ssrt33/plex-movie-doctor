@@ -30,6 +30,8 @@ def _defaults():
         "scan": {"running": False, "step": "", "error": None},
         "movies": 0,
         "stale": 0,
+        "missing_example": None,  # one file Plex lists that isn't found here
+        "suggest_map": None,      # PATH_MAP worked out from those files
         "libraries": [],
         "server": None,
     }

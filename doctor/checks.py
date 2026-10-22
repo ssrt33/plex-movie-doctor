@@ -177,12 +177,14 @@ def run(views, roots, settings, details=None):
     """views: from view(); roots: local library folders; details(rk) -> full Plex item (for HDR info)."""
     lib = Library(views, roots, settings)
     issues, stale = [], 0
-    usable = []
+    usable, missing = [], []
     for v in views:
         if not v["media"]:
             continue
         if any(not os.path.exists(p["local"]) for m in v["media"] for p in m["parts"]):
             stale += 1  # Plex hasn't caught up with a change, or PATH_MAP is off; look again next scan
+            if len(missing) < 40:
+                missing.append(v["media"][0]["parts"][0]["plex"])
             continue
         usable.append(v)
 
@@ -197,7 +199,7 @@ def run(views, roots, settings, details=None):
             issues += _junk(lib, v, folder)
             if v["matched"]:
                 issues += _artwork(lib, v, folder)
-    return {"issues": issues, "movies": len(views), "stale": stale}
+    return {"issues": issues, "movies": len(views), "stale": stale, "missing": missing}
 
 
 # ---------------------------------------------------------------- naming

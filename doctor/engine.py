@@ -81,6 +81,9 @@ def _publish(res, libs):
         st["seen"] = [i["id"] for i in res["issues"]]
         st["movies"] = res["movies"]
         st["stale"] = res["stale"]
+        st["missing_example"] = res["missing"][0] if res["missing"] else None
+        st["suggest_map"] = paths.suggest_map(res["missing"], paths.mounts()) \
+            if res["missing"] and res["stale"] >= res["movies"] / 2 else None
         st["libraries"] = libs
         st["last_scan"] = time.time()
         store.save()

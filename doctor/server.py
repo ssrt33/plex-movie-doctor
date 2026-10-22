@@ -42,6 +42,7 @@ def state():
     s["trash_mounted"] = engine.trash_mounted()
     s["configured"] = bool(config.PLEX_TOKEN)
     s["plex_url"] = config.PLEX_URL
+    s["path_map"] = config.PATH_MAP
     s["groups"] = GROUP_ORDER
     s["kinds"] = {k: {"group": g, "label": l, "moves_files": mv, "about": about}
                   for k, (g, l, mv, about) in KINDS.items()}

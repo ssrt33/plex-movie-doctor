@@ -217,3 +217,15 @@ def test_rescan_after_fixes_is_clean_for_those_movies(env):
     engine.scan()
     left = [i["kind"] for i in issues() if "Matrix" in i["summary"]]
     assert left == ["artwork"]
+
+
+def test_wrong_path_map_is_worked_out(env, monkeypatch):
+    lib, _trash, _fake = env
+    monkeypatch.setattr(config, "PATH_MAP", f"/movies={lib}")  # Plex really sees /data/movies
+    before = tree(lib)
+    engine.scan()
+    st = store.get()
+    assert st["stale"] == st["movies"] and not issues()
+    assert st["missing_example"].startswith("/data/movies/")
+    assert st["suggest_map"]["map"] == f"/data/movies={lib}"
+    assert tree(lib) == before
