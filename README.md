@@ -57,9 +57,10 @@ page that opens ends in `X-Plex-Token=…`; that value is your token. Use the se
 
 ### 2. Make a trash folder
 
-Create a dataset or folder **outside** the movie library, e.g. `/mnt/HDDs/Stacks/plex-movie-doctor/trash`,
-and a `config` folder next to it. Give the `apps` user (568) read/write on both, and on the movie
-library itself (it needs write access there to rename and move).
+Create a folder **outside** the movie library but on the same pool, e.g. `/mnt/tank/media/movies_trash`
+next to `/mnt/tank/media/movies` (moves within a pool are instant; across pools a big movie has to be
+copied), and a config folder such as `/mnt/tank/apps/plex-movie-doctor`. Give the `apps` user (568)
+read/write on both, and on the movie library itself (it needs write access there to rename and move).
 
 ### 3. Find the path Plex uses
 
