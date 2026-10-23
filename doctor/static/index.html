@@ -285,7 +285,8 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 function localStorageGet(k){ try { return localStorage.getItem(k); } catch { return null; } }
 function localStorageSet(k, v){ try { localStorage.setItem(k, v); } catch {} }
 let S = null, openGroups = new Set(JSON.parse(localStorageGet("openGroups") || "[]")), pending = new Set(),
-    confirming = null, showAllHist = false, keepChoice = {};
+    confirming = null, showAllHist = false, keepChoice = {}, shown = {}, confirmKind = null;
+const PAGE = 50;
 
 async function api(method, path, body){
   const r = await fetch(path, {method, headers: body ? {"Content-Type": "application/json"} : {}, body: body ? JSON.stringify(body) : undefined});
@@ -399,7 +400,10 @@ function renderBanners(){
   }
   else if (S.stale) b.push(`<div class="banner warn"><b>${plural(S.stale, "movie")} skipped</b>Plex lists files for these that aren't there right now (usually Plex hasn't caught up with a change yet). They'll be checked again next time.</div>`);
   if (S.configured && !S.can_move) b.push(`<div class="banner warn"><b>Fixes that move files are off</b>${esc(S.can_move_reason)} Saving artwork and NFOs still works.</div>`);
-  else if (S.configured && !S.trash_mounted) b.push(`<div class="banner warn"><b>The trash folder isn't a mounted volume</b>Anything moved there would vanish when the container is rebuilt. Mount a folder at <code>/trash</code>.</div>`);
+  const lb = S.last_bulk;
+  if (lb && lb.failed_n && Date.now() / 1000 - lb.at < 86400)
+    b.push(`<div class="banner warn"><b>Last “fix all”: ${lb.fixed} done, ${lb.failed_n} skipped</b>${lb.failed.map(esc).join("<br>")}${lb.failed_n > lb.failed.length ? "<br>…" : ""}<br>Skipped ones stay in the list for the next check.</div>`);
+  if (S.configured && S.can_move && !S.trash_mounted) b.push(`<div class="banner warn"><b>The trash folder isn't a mounted volume</b>Anything moved there would vanish when the container is rebuilt. Mount a folder at <code>/trash</code>.</div>`);
   $("#banners").innerHTML = b.join("");
 }
 
@@ -411,15 +415,21 @@ function renderIssues(fixable, info){
   const kinds = Object.keys(byKind).sort((a, b) => order.indexOf(a) - order.indexOf(b));
   let html = "", lastGroup = null;
   for (const k of kinds) {
-    const K = S.kinds[k], list = byKind[k], isOpen = openGroups.has(k), canBulk = k === "artwork" && list.length > 1;
+    const K = S.kinds[k], list = byKind[k], isOpen = openGroups.has(k), canBulk = S.bulk_kinds.includes(k) && list.length > 1;
+    const limit = shown[k] || PAGE, verb = k === "artwork" ? "Save" : "Fix";
+    const bulk = !canBulk ? "" : confirmKind === k
+      ? `<span class="confirm">${k === "artwork" ? `Save artwork for all ${list.length.toLocaleString()}?` : `${k === "junk" ? "Move" : "Rename"} all ${list.length.toLocaleString()}?`} One Undo puts them all back.
+           <button class="btn small primary" data-fixkind="${k}">Yes</button><button class="btn small ghost" data-cancelkind>No</button></span>`
+      : `<button class="btn small" data-askkind="${k}" ${S.scan.running || (K.moves_files && !S.can_move) ? "disabled" : ""}>${verb} all ${list.length.toLocaleString()}</button>`;
     if (K.group !== lastGroup) { html += `<div class="gtitle">${esc(K.group)}</div>`; lastGroup = K.group; }
     html += `<div class="group${isOpen ? " open" : ""}" data-kind="${k}">
       <div class="group-head" data-toggle="${k}" role="button" tabindex="0" aria-expanded="${isOpen}">
         <div><div class="t">${caret}${esc(K.label)} <span class="n">${list.length}</span>${K.moves_files ? '<span class="tag busy">moves files</span>' : '<span class="tag off">adds files</span>'}</div>
         <div class="about">${esc(K.about)}</div></div>
-        ${canBulk ? `<button class="btn small" data-fixkind="${k}" ${S.scan.running ? "disabled" : ""}>Save all ${list.length}</button>` : ""}
+        ${bulk}
       </div>
-      <div class="group-body">${list.map(renderIssue).join("")}</div>
+      <div class="group-body">${isOpen ? list.slice(0, limit).map(renderIssue).join("") : ""}
+        ${isOpen && list.length > limit ? `<button class="btn small ghost" data-more="${k}">Show ${Math.min(PAGE, list.length - limit)} more of ${(list.length - limit).toLocaleString()}</button>` : ""}</div>
     </div>`;
   }
   $("#groups").innerHTML = html || `<div class="empty">${blind() ? "Nothing can be checked until the movie files are visible."
@@ -444,7 +454,7 @@ function renderHistory(){
       <div class="act">${h.undone ? ""
         : confirming === h.id ? `<span class="confirm">Undo what's possible? <button class="btn small" data-force="${h.id}">Yes</button><button class="btn small ghost" data-cancel>No</button></span>`
         : `<button class="btn small ghost" data-undo="${h.id}" ${S.scan.running ? "disabled" : ""}>Undo</button>`}</div>
-      <div class="a">${h.undone ? '<span class="tag off">undone</span>' : '<span class="tag you">fixed</span>'}
+      <div class="a">${h.undone ? '<span class="tag off">undone</span>' : h.batch ? '<span class="tag you">fix all</span>' : '<span class="tag you">fixed</span>'}
         <span>${esc(S.kinds[h.kind]?.label || h.kind)} · ${esc(ago(h.at))}</span></div>
       ${h.plan && h.plan.length ? `<details class="more"><summary>What was done</summary><ul class="plan">${h.plan.map(p => `<li>${esc(p)}</li>`).join("")}</ul></details>` : ""}
     </div>`).join("") + (S.history.length > 12 ? `<div class="lib-item more"><button class="btn small ghost" data-morehist>${showAllHist ? "Show fewer" : `Show all ${S.history.length}`}</button></div>` : "")
@@ -469,7 +479,8 @@ function renderSettings(){
         <span>Review only. Scans never change anything; each fix waits for you, can be undone, and nothing is deleted.</span></div>
       <div class="lib">Plex <span class="path" id="plexUrl"></span><span class="path" id="plexLibs"></span></div>
       <div class="sub-h">Naming</div>
-      <div class="f"><label for="namingId">Folder names</label><select id="namingId"></select></div>
+      <div class="f"><label for="layout">How your movies are kept</label><select id="layout"></select></div>
+      <div class="f" style="margin-top:10px"><label for="namingId">Folder names</label><select id="namingId"></select></div>
       <label class="sw" style="margin-top:6px"><span><b>Keep 4K and HD copies</b><small>Different resolutions of one movie are versions, not duplicates.</small></span>
         <input type="checkbox" id="keepVersions"><i></i></label>
       <div class="sub-h">Schedule</div>
@@ -479,6 +490,10 @@ function renderSettings(){
   $("#plexUrl").textContent = S.plex_url || "";
   $("#plexLibs").textContent = (S.libraries || []).length ? "Libraries: " + S.libraries.map(l => `${l.name} (${l.folders.join(", ")})`).join("; ") : "";
   $("#keepVersions").checked = !!s.keep_versions;
+  const lay = $("#layout"), used = S.layout_used === "flat" ? "all in one folder" : S.layout_used === "folders" ? "a folder each" : "";
+  if (document.activeElement !== lay) lay.innerHTML = [["auto", `Work it out${used ? ` (${used})` : ""}`], ["flat", "All in one folder, renamed in place"], ["folders", "Each movie in its own folder"]]
+    .map(([v, t]) => `<option value="${v}"${v === (s.layout || "auto") ? " selected" : ""}>${esc(t)}</option>`).join("");
+  $("#namingId").closest(".f").style.display = S.layout_used === "flat" ? "none" : "";
   const nid = $("#namingId");
   if (document.activeElement !== nid) nid.innerHTML = IDS.map(([v, t]) => `<option value="${v}"${v === s.naming_id ? " selected" : ""}>${esc(t)}</option>`).join("");
   const sel = $("#every");
@@ -520,11 +535,16 @@ document.addEventListener("click", async e => {
       try { await api("POST", `/api/issues/${d.fix}/fix`, keepChoice[d.fix] ? {keep: keepChoice[d.fix]} : {}); delete keepChoice[d.fix]; toast("Done. It's in History if you want it back."); }
       finally { pending.delete(d.fix); }
       refresh();
+    } else if (d.askkind) {
+      confirmKind = d.askkind; render();
+    } else if (d.cancelkind !== undefined) {
+      confirmKind = null; render();
+    } else if (d.more) {
+      shown[d.more] = (shown[d.more] || PAGE) + PAGE; render();
     } else if (d.fixkind) {
-      t.disabled = true; t.innerHTML = '<span class="spin"></span> Saving';
-      const r = await api("POST", `/api/issues/fix-kind/${d.fixkind}`);
-      toast(r.failed.length ? `Saved ${r.fixed}; ${r.failed.length} skipped (changed since the check).` : `Saved ${r.fixed}.`, r.failed.length > 0);
-      refresh();
+      confirmKind = null;
+      await api("POST", `/api/issues/fix-kind/${d.fixkind}`);
+      toast("Working through them – progress is at the top."); setTimeout(refresh, 400);
     } else if (d.ignore) {
       await api("POST", `/api/issues/${d.ignore}/ignore`, {on: true}); refresh();
     } else if (d.unignore) {
@@ -557,6 +577,7 @@ document.addEventListener("change", async e => {
   try {
     if (t.id === "every") S.settings = await api("POST", "/api/settings", {scan_every_hours: Number(t.value)});
     else if (t.id === "namingId") { S.settings = await api("POST", "/api/settings", {naming_id: t.value}); toast("Saved. Checking again with the new names…"); render(); return; }
+    else if (t.id === "layout") { S.settings = await api("POST", "/api/settings", {layout: t.value}); toast("Saved. Checking again…"); render(); return; }
     else if (t.id === "keepVersions") { S.settings = await api("POST", "/api/settings", {keep_versions: t.checked}); toast("Saved. Checking again…"); render(); return; }
     else return;
     render(); toast("Saved.");

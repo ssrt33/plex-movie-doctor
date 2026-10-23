@@ -189,29 +189,31 @@ def is_kodi_nfo(path):
     return head.startswith(b"<?xml") or head.lower().startswith(b"<movie")
 
 
-def has_poster(files, stems):
+def has_poster(files, stems, shared=False):
+    """shared: the folder holds many movies, so "poster.jpg" there isn't this movie's."""
     for f in files:
         st, ext = split_ext(f)
         if ext not in IMAGE_EXT:
             continue
-        low = st.lower()
-        if low in POSTER_NAMES or any(st == s or st == s + "-poster" for s in stems):
+        if (not shared and st.lower() in POSTER_NAMES) or any(st == s or st == s + "-poster" for s in stems):
             return True
     return False
 
 
-def has_fanart(files, stems):
+def has_fanart(files, stems, shared=False):
     for f in files:
         st, ext = split_ext(f)
         if ext not in IMAGE_EXT:
             continue
-        if st.lower() in FANART_NAMES or any(st == s + "-fanart" for s in stems):
+        if (not shared and st.lower() in FANART_NAMES) or any(st == s + "-fanart" for s in stems):
             return True
     return False
 
 
-def has_nfo(folder, files):
-    return any(split_ext(f)[1] == ".nfo" and is_kodi_nfo(os.path.join(folder, f)) for f in files)
+def has_nfo(folder, files, stems=None):
+    """stems given: only "<movie file name>.nfo" counts (a folder shared by many movies)."""
+    return any(split_ext(f)[1] == ".nfo" and (stems is None or split_ext(f)[0] in stems)
+               and is_kodi_nfo(os.path.join(folder, f)) for f in files)
 
 
 def junk_in(folder, part_paths, size_of=os.path.getsize):

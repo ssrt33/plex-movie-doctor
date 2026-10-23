@@ -119,7 +119,13 @@ def run_moves(moves):
     return done, made
 
 
+_deferred = None  # while fixing many at once: collect folders here and ask Plex once at the end
+
+
 def _refresh(plex, dirs):
+    if _deferred is not None:
+        _deferred.update(tuple(d) for d in dirs)
+        return
     for section, plex_dir in dirs:
         try:
             plex.refresh_path(section, plex_dir)
@@ -141,6 +147,17 @@ def _now_at(path, later):
         if path == s or path.startswith(s.rstrip("/") + "/"):
             path = d + path[len(s):]
     return path
+
+
+def _check_undo(rec):
+    done = rec["done"]
+    for k, (s, d) in enumerate(done):
+        later = done[k + 1:]
+        src_now = _now_at(s, later)
+        if not os.path.lexists(_now_at(d, later)) or \
+                (os.path.lexists(src_now) and not _same(src_now, _now_at(d, later))):
+            raise Stale(f"Things moved since this fix ({os.path.basename(d)}), so undoing it might not put "
+                        "everything back. Undo what can be undone?")
 
 
 def undo_moves(plex, rec, force=False):
@@ -287,8 +304,9 @@ def apply_artwork(plex, fix):
     if not md:
         raise Stale("That movie isn't in Plex any more.")
     made, skipped = [], []
+    names = fix.get("names") or {"poster": "poster", "fanart": "fanart", "nfo": "movie.nfo"}
     try:
-        for kind, name in (("poster", "poster"), ("fanart", "fanart")):
+        for kind, name in (("poster", names["poster"]), ("fanart", names["fanart"])):
             src = fix["want"].get(kind)
             if not src:
                 continue
@@ -300,7 +318,7 @@ def apply_artwork(plex, fix):
             if not _write_new(os.path.join(folder, name + _ext_for(data, ctype)), data, made):
                 skipped.append(kind)
         if fix["want"].get("nfo"):
-            if not _write_new(os.path.join(folder, "movie.nfo"), nfo_xml(md), made):
+            if not _write_new(os.path.join(folder, names["nfo"]), nfo_xml(md), made):
                 skipped.append("nfo")
     except Exception as e:
         for p in made:  # we made these moments ago; nothing of yours
@@ -336,7 +354,39 @@ def apply(plex, issue, keep=None):
     raise FixError(f"Unknown fix {fix['type']}")
 
 
-UNDO = {"moves": undo_moves, "created": undo_created}
+def defer_refresh():
+    global _deferred
+    _deferred = set()
+
+
+def flush_refresh(plex):
+    global _deferred
+    dirs, _deferred = sorted(_deferred or ()), None
+    _refresh(plex, [list(d) for d in dirs])
+
+
+def undo_batch(plex, rec, force=False):
+    """Undo a "fix all": every part in reverse. Without force, stops before touching anything if
+    something moved since; with force, puts back what it can."""
+    if not force:
+        for r in rec["records"]:
+            if r["type"] == "moves":
+                _check_undo(r)
+    defer_refresh()
+    errors = []
+    try:
+        for r in reversed(rec["records"]):
+            try:
+                UNDO[r["type"]](plex, r, force=force)
+            except FixError as e:
+                errors.append(str(e))
+    finally:
+        flush_refresh(plex)
+    if errors and not force:
+        raise FixError(f"{len(errors)} couldn't be undone: {errors[0]}")
+
+
+UNDO = {"moves": undo_moves, "created": undo_created, "batch": undo_batch}
 
 
 def undo(plex, rec, force=False):

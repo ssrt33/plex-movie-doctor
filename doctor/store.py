@@ -21,6 +21,7 @@ def _defaults():
             "scan_every_hours": config.SCAN_EVERY_HOURS,
             "naming_id": config.NAMING_ID if config.NAMING_ID in ("none", "tmdb", "imdb") else "none",
             "keep_versions": config.KEEP_VERSIONS,
+            "layout": config.LAYOUT if config.LAYOUT in ("auto", "folders", "flat") else "auto",
         },
         "issues": [],        # open issues from the last scan
         "seen": [],          # issue ids already reported, so notifications only mention new ones
@@ -33,6 +34,8 @@ def _defaults():
         "missing_example": None,  # one file Plex lists that isn't found here
         "suggest_map": None,      # PATH_MAP worked out from those files
         "libraries": [],
+        "layout_used": None,
+        "last_bulk": None,
         "server": None,
     }
 

@@ -44,6 +44,7 @@ def state():
     s["plex_url"] = config.PLEX_URL
     s["path_map"] = config.PATH_MAP
     s["groups"] = GROUP_ORDER
+    s["bulk_kinds"] = list(engine.BULK_KINDS)
     s["kinds"] = {k: {"group": g, "label": l, "moves_files": mv, "about": about}
                   for k, (g, l, mv, about) in KINDS.items()}
     s.pop("seen", None)
@@ -83,18 +84,24 @@ def fix(issue_id):
     return jsonify({"ok": True})
 
 
-@app.post("/api/issues/fix-kind/artwork")
-def fix_artwork():
-    """Save artwork/NFO for every open artwork issue. Only creates files, never moves any."""
-    ids = [i["id"] for i in store.get()["issues"] if i["kind"] == "artwork" and i["fix"] and not i.get("ignored")]
-    done, failed = 0, []
-    for i in ids:
+@app.post("/api/issues/fix-kind/<kind>")
+def fix_kind(kind):
+    """"Fix all" for renames, junk or artwork. Runs in the background; the page shows progress."""
+    if kind not in engine.BULK_KINDS:
+        return err("That kind of fix has to be done one at a time.")
+    if store.get()["scan"]["running"]:
+        return err("A scan or another fix is still running. Try again in a moment.", 409)
+
+    def run():
         try:
-            engine.fix_issue(i)
-            done += 1
-        except (fixes.FixError, LookupError, PlexError) as e:
-            failed.append(str(e))
-    return jsonify({"fixed": done, "failed": failed})
+            engine.fix_many(kind)
+        except Exception as e:  # shown on the page
+            log.warning("Fix all %s: %s", kind, e)
+            with store.lock():
+                store.get()["last_bulk"] = {"kind": kind, "fixed": 0, "failed": [str(e)], "failed_n": 1,
+                                            "at": __import__("time").time()}
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({"started": True})
 
 
 @app.post("/api/issues/<issue_id>/ignore")
@@ -130,6 +137,11 @@ def settings():
                 return err("Pick none, tmdb or imdb")
             rescan |= s["naming_id"] != body["naming_id"]
             s["naming_id"] = body["naming_id"]
+        if "layout" in body:
+            if body["layout"] not in ("auto", "folders", "flat"):
+                return err("Pick auto, folders or flat")
+            rescan |= s.get("layout") != body["layout"]
+            s["layout"] = body["layout"]
         if "keep_versions" in body:
             rescan |= s["keep_versions"] != bool(body["keep_versions"])
             s["keep_versions"] = bool(body["keep_versions"])

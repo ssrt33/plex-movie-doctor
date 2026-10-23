@@ -26,8 +26,8 @@ TRASH = "{TRASH}"  # filled in with a dated trash folder when the fix runs
 # kind -> (group, label, moves files, description)
 KINDS = {
     "rename": ("Naming & folders", "Folder or file name doesn't match", True,
-               "Renames to “Title (Year)/Title (Year).ext”, the way Plex recommends. Subtitles and other files "
-               "named after the movie are renamed with it."),
+               "Renames to “Title (Year)”, the way Plex recommends (the folder too, for movies in their own "
+               "folder). Subtitles and other files named after the movie are renamed with it."),
     "own_folder": ("Naming & folders", "Movie not in its own folder", True,
                    "Moves the movie and its subtitles into a new “Title (Year)” folder."),
     "unmatched": ("Naming & folders", "Not matched in Plex", True,
@@ -42,8 +42,8 @@ KINDS = {
     "same_file": ("Duplicates", "Same file in two libraries", False,
                   "Two Plex libraries point at the same files. They aren't copies; remove the overlap in Plex."),
     "artwork": ("Artwork & NFO", "Missing poster, fanart or NFO", False,
-                "Saves Plex's poster and background next to the movie as poster.jpg and fanart.jpg, and writes a "
-                "movie.nfo with its details, so the folder is complete on its own."),
+                "Saves Plex's poster and background next to the movie and writes an .nfo with its details "
+                "(named after the movie, e.g. “Heat (1995)-poster.jpg”, when movies share a folder)."),
 }
 GROUP_ORDER = ["Naming & folders", "Duplicates", "Artwork & NFO"]
 
@@ -145,6 +145,14 @@ class Library:
                     self.owners[os.path.dirname(p["local"])].add(v["rk"])
                     self.part_paths.add(p["local"])
         self._listing = {}
+        layout = settings.get("layout", "auto")
+        if layout == "auto":  # most movies loose at the top of the library -> that's how they're kept
+            loose = sum(1 for v in views if v["media"] and self.is_root(os.path.dirname(v["media"][0]["parts"][0]["local"])))
+            layout = "flat" if views and loose >= len(views) / 2 else "folders"
+        self.flat = layout == "flat"
+
+    def shared(self, folder):
+        return self.is_root(folder) or len(self.owners.get(folder, ())) > 1
 
     def rel(self, p):
         return paths.rel_to(p, self.roots)
@@ -189,17 +197,28 @@ def run(views, roots, settings, details=None):
         usable.append(v)
 
     issues += _duplicates(lib, usable, details)
+    shared = set()
     for v in usable:
         folders = {os.path.dirname(p["local"]) for m in v["media"] for p in m["parts"]}
         if len(folders) != 1:
             continue  # copies in several folders: sort out the duplicate first
         folder = folders.pop()
         issues += _naming(lib, v, folder)
-        if lib.own(folder, v["rk"]):
-            issues += _junk(lib, v, folder)
-            if v["matched"]:
-                issues += _artwork(lib, v, folder)
-    return {"issues": issues, "movies": len(views), "stale": stale, "missing": missing}
+        own = lib.own(folder, v["rk"])
+        if own:
+            issues += _junk(lib, [v], folder)
+        else:
+            shared.add(folder)
+        if v["matched"] and (own or lib.flat):
+            issues += _artwork(lib, v, folder, own)
+    if lib.flat:
+        for folder in sorted(shared):
+            issues += _junk(lib, [], folder)
+    # Only a movie's own folder ties issues together; a folder shared by many movies doesn't.
+    for i in issues:
+        i["folders"] = [f for f in i["folders"] if not lib.shared(f)]
+    return {"issues": issues, "movies": len(views), "stale": stale, "missing": missing,
+            "layout": "flat" if lib.flat else "folders"}
 
 
 # ---------------------------------------------------------------- naming
@@ -235,15 +254,18 @@ def _version_stems(lib, v, folder, stem):
     return out
 
 
-def _layout(lib, v, folder, title, year, own):
-    """Moves that give this movie the standard layout. Returns (moves, target_folder) or raises Conflict."""
+def _layout(lib, v, folder, title, year, own, inplace=False):
+    """Moves that give this movie the standard layout. Returns (moves, target_folder, first_file_after).
+
+    inplace: only rename the files where they are (movies kept together in one folder). Raises Conflict.
+    """
     st = lib.settings
     fname = naming.folder_name(title, year, v["edition"], v["ids"], st.get("naming_id", "none"))
     stem = naming.file_stem(title, year, v["edition"])
     stems = _version_stems(lib, v, folder, stem)
     files = lib.files(folder)
     moves = []
-    target = folder if own else os.path.join(folder, fname)
+    target = folder if own or inplace else os.path.join(folder, fname)
     if own and not naming.folder_ok(os.path.basename(folder), fname, st.get("naming_id", "none")):
         target = os.path.join(os.path.dirname(folder), fname)
     renamed = {}
@@ -253,17 +275,20 @@ def _layout(lib, v, folder, title, year, own):
         renamed[src] = os.path.join(folder, want + os.path.splitext(src)[1])
         for side in naming.sidecars(files, cur, exclude=set(here), other_stems=[split_ext(h)[0] for h in here]):
             renamed[os.path.join(folder, side)] = os.path.join(folder, want + side[len(cur):])
-    if own:
+    first = v["media"][0]["parts"][0]["local"]
+    if own or inplace:
         for src, dst in renamed.items():
             if src != dst:
                 moves.append([src, dst])
         if target != folder:
             moves.append([folder, target])
+        after = os.path.join(target, os.path.basename(renamed.get(first, first)))
     else:
         for src, dst in renamed.items():
             moves.append([src, os.path.join(target, os.path.basename(dst))])
+        after = os.path.join(target, os.path.basename(renamed.get(first, first)))
     _check_targets(moves, folder, target)
-    return moves, target
+    return moves, target, after
 
 
 class Conflict(Exception):
@@ -310,9 +335,9 @@ def _refresh_dirs(v, folder, target):
     return [[v["section"], paths.to_plex(d)] for d in sorted(dirs)]
 
 
-def _layout_issue(lib, v, folder, own, title, year, kind, summary, note=None):
+def _layout_issue(lib, v, folder, own, title, year, kind, summary, note=None, inplace=False):
     try:
-        moves, target = _layout(lib, v, folder, title, year, own)
+        moves, target, after = _layout(lib, v, folder, title, year, own, inplace)
     except Conflict as e:
         return [_issue("wrong_match" if kind == "unmatched" else kind, [v],
                        f"{summary} – can't fix: {e}", (v["rk"], folder, "conflict"),
@@ -320,8 +345,10 @@ def _layout_issue(lib, v, folder, own, title, year, kind, summary, note=None):
                             "then scan again.", folders=[folder])]
     if not moves:
         return []
-    cur_name = lib.rel(folder) if own else lib.rel(v["media"][0]["parts"][0]["local"])
-    changes = [{"field": "Now", "before": cur_name, "after": lib.rel(target)}]
+    if own:
+        changes = [{"field": "Now", "before": lib.rel(folder), "after": lib.rel(target)}]
+    else:
+        changes = [{"field": "Now", "before": lib.rel(v["media"][0]["parts"][0]["local"]), "after": lib.rel(after)}]
     fix = {"type": "moves", "moves": moves, "refresh": _refresh_dirs(v, folder, target), "rk": v["rk"]}
     return [_issue(kind, [v], summary, (v["rk"], folder, "layout"), changes=changes, plan=_plan_lines(lib, moves),
                    fix=fix, note=note, folders=[folder, target])]
@@ -341,7 +368,8 @@ def _naming(lib, v, folder):
         t, y = got
         moves_needed = _layout_issue(lib, v, folder, own, t, y, "unmatched",
                                      f"“{name_now}” isn't matched in Plex",
-                                     note=f"Looks like {t} ({y}). After the rename, Plex usually matches it on its own.")
+                                     note=f"Looks like {t} ({y}). After the rename, Plex usually matches it on its own.",
+                                     inplace=lib.flat)
         if moves_needed:
             return moves_needed
         return [_issue("unmatched", [v], f"“{name_now}” isn't matched in Plex", (v["rk"], "nomatch"),
@@ -360,6 +388,8 @@ def _naming(lib, v, folder):
                        folders=[folder])]
     if own:
         return _layout_issue(lib, v, folder, True, v["title"], v["year"], "rename", _title(v))
+    if lib.flat:  # movies are kept together: just name the files right, where they are
+        return _layout_issue(lib, v, folder, False, v["title"], v["year"], "rename", _title(v), inplace=True)
     where = "the top of the library" if lib.is_root(folder) else f"a folder shared with other movies ({lib.rel(folder)})"
     return _layout_issue(lib, v, folder, False, v["title"], v["year"], "own_folder", _title(v),
                          note=f"It's loose in {where}.")
@@ -367,37 +397,45 @@ def _naming(lib, v, folder):
 
 # ---------------------------------------------------------------- junk
 
-def _junk(lib, v, folder):
+def _junk(lib, movies, folder):
+    """Junk in one movie's own folder (movies=[v]) or in a folder many movies share (movies=[])."""
     found = naming.junk_in(folder, lib.part_paths)
     if not found:
         return []
     moves = [[p, lib.trash_dst("junk", p)] for p in found]
     names = [os.path.basename(p) + ("/" if os.path.isdir(p) else "") for p in found]
-    return [_issue("junk", [v], f"{_title(v)}: {len(found)} junk file{'s' if len(found) > 1 else ''}",
-                   (v["rk"], folder, "junk", *names), plan=_plan_lines(lib, moves),
-                   fix={"type": "moves", "moves": moves, "refresh": [], "rk": v["rk"]}, folders=[folder])]
+    where = _title(movies[0]) if movies else (lib.rel(folder) or "Movie folder")
+    rk = movies[0]["rk"] if movies else ""
+    return [_issue("junk", movies, f"{where}: {len(found)} junk file{'s' if len(found) > 1 else ''}",
+                   (rk, folder, "junk", *names), plan=_plan_lines(lib, moves),
+                   fix={"type": "moves", "moves": moves, "refresh": [], "rk": rk}, folders=[folder])]
 
 
 # ---------------------------------------------------------------- artwork & nfo
 
-def _artwork(lib, v, folder):
+def _artwork(lib, v, folder, own=True):
+    """Own folder: poster.jpg, fanart.jpg, movie.nfo. Shared folder: named after the movie's file,
+    "Heat (1995)-poster.jpg", "Heat (1995)-fanart.jpg", "Heat (1995).nfo" (what Kodi and Jellyfin read)."""
     files = lib.files(folder)
     stems = [split_ext(os.path.basename(p["local"]))[0] for m in v["media"] for p in m["parts"]]
+    main = stems[0]
+    names = {"poster": "poster", "fanart": "fanart", "nfo": "movie.nfo"} if own else \
+        {"poster": f"{main}-poster", "fanart": f"{main}-fanart", "nfo": f"{main}.nfo"}
     want, plan, missing = {}, [], []
-    if not naming.has_poster(files, stems):
+    if not naming.has_poster(files, stems, shared=not own):
         missing.append("poster")
         if v["thumb"]:
             want["poster"] = v["thumb"]
-            plan.append("Save Plex's poster as poster.jpg")
-    if not naming.has_fanart(files, stems):
+            plan.append(f"Save Plex's poster as {names['poster']}.jpg")
+    if not naming.has_fanart(files, stems, shared=not own):
         missing.append("fanart")
         if v["art"]:
             want["fanart"] = v["art"]
-            plan.append("Save Plex's background as fanart.jpg")
-    if not naming.has_nfo(folder, files):
+            plan.append(f"Save Plex's background as {names['fanart']}.jpg")
+    if not naming.has_nfo(folder, files, stems=None if own else stems):
         missing.append("NFO")
         want["nfo"] = True
-        plan.append("Write movie.nfo (title, year, plot, genres, cast, crew, IMDb/TMDB ids)")
+        plan.append(f"Write {names['nfo']} (title, year, plot, genres, cast, crew, IMDb/TMDB ids)")
     if not want:
         return []
     changes = []
@@ -406,7 +444,7 @@ def _artwork(lib, v, folder):
     plan.append(f"In: {lib.rel(folder)}")
     return [_issue("artwork", [v], f"{_title(v)}: no {', '.join(missing)}", (v["rk"], folder, "art", *sorted(want)),
                    changes=changes, plan=plan, folders=[folder],
-                   fix={"type": "artwork", "rk": v["rk"], "folder": folder, "want": want})]
+                   fix={"type": "artwork", "rk": v["rk"], "folder": folder, "want": want, "names": names})]
 
 
 # ---------------------------------------------------------------- duplicates

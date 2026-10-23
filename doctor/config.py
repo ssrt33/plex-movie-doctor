@@ -25,6 +25,9 @@ PORT = int(os.environ.get("PORT", "8688"))
 SCAN_EVERY_HOURS = float(os.environ.get("SCAN_EVERY_HOURS", "12"))
 # Add an id to folder names: "none", "tmdb" -> "Heat (1995) {tmdb-949}", "imdb" -> "{imdb-tt0113277}"
 NAMING_ID = os.environ.get("NAMING_ID", "none").strip().lower()
+# How the movies are kept: "folders" (one folder per movie), "flat" (all in one folder, renamed in place)
+# or "auto" (flat when most movies sit loose at the top of the library).
+LAYOUT = os.environ.get("LAYOUT", "auto").strip().lower()
 # Treat a 4K and a 1080p copy of the same movie as versions you want to keep, not duplicates.
 KEEP_VERSIONS = os.environ.get("KEEP_VERSIONS", "false").strip().lower() in ("1", "true", "yes", "on")
 

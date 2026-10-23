@@ -11,6 +11,14 @@ rename or create, and only happens when you press **Fix**. Every fix is in the h
 It's a sibling of [abs-library-doctor](https://github.com/ssrt33/abs-library-doctor) (same look,
 same way of working), for movies instead of audiobooks.
 
+## Your layout
+
+Movies can be kept **each in its own folder** (`Heat (1995)/Heat (1995).mkv`) or **all in one folder**
+(`Heat (1995).mkv`, `Coneheads (1993).mp4` side by side). The app works out which you use and sticks to
+it: with everything in one folder, files are renamed where they are and never moved into folders, and
+artwork is named after each movie (`Heat (1995)-poster.jpg`, `Heat (1995)-fanart.jpg`, `Heat (1995).nfo`).
+You can set it on the page, or with `LAYOUT` (`auto`, `flat` or `folders`).
+
 ## What it checks
 
 | Check | What Fix does |
@@ -20,7 +28,10 @@ same way of working), for movies instead of audiobooks.
 | Not matched in Plex | Renames from the release name (`Some.Film.2015.720p.WEB` → `Some Film (2015)`), which usually lets Plex match it. Without a year in the name it just tells you |
 | Leftover junk files | Moves samples, `Sample/` folders, release-group `.nfo`/`.txt` files, `RARBG.txt`, `WWW.YTS.MX.jpg`, `Thumbs.db`, `.rar` leftovers and the like to the trash |
 | Duplicate copies | Lists every copy with resolution, HDR/Dolby Vision, codec, audio and size; picks the best to keep, and you can pick another. The rest go to the trash |
-| Missing poster, fanart or NFO | Saves Plex's poster and background as `poster.jpg` and `fanart.jpg` next to the movie and writes a Kodi/Jellyfin-style `movie.nfo` (title, plot, genres, cast, crew, IMDb/TMDB ids). Only adds files; there's a **Save all** button for this one |
+| Missing poster, fanart or NFO | Saves Plex's poster and background next to the movie and writes a Kodi/Jellyfin-style `.nfo` (title, plot, genres, cast, crew, IMDb/TMDB ids). Only adds files |
+
+**Fix all:** renames, junk and artwork can be done all at once (after a confirm), as one entry in the
+history with one **Undo** for the lot. Duplicates and unmatched movies are always one at a time.
 
 **Things it won't rename:** when the name on disk and Plex's match disagree (a folder called
 `Dune (1984)` that Plex matched to the 2021 film, or a title that looks nothing alike), it tells
@@ -97,6 +108,7 @@ copies moved to the trash disappear from Plex straight away instead of showing a
 | `SCAN_EVERY_HOURS` | `12` | Starting value (change it on the page) |
 | `NAMING_ID` | `none` | `none`, `tmdb` or `imdb`; starting value (change it on the page) |
 | `KEEP_VERSIONS` | `false` | Starting value (change it on the page) |
+| `LAYOUT` | `auto` | `auto`, `flat` (all movies in one folder) or `folders`; starting value (change it on the page) |
 | `NOTIFY_URL` | | ntfy topic (or any plain-text POST URL) told when a scan finds new things |
 | `PUID` / `PGID` | `568` | Owner for moved and created files |
 | `PORT` | `8688` | |

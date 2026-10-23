@@ -26,6 +26,10 @@ CATALOG = [
     {"title": "Dune", "year": 2021, "imdb": "tt1160419", "tmdb": "438631"},
     {"title": "Mission: Impossible", "year": 1996, "imdb": "tt0117060", "tmdb": "954"},
     {"title": "Blade Runner", "year": 1982, "imdb": "tt0083658", "tmdb": "78"},
+    {"title": "Coneheads", "year": 1993, "imdb": "tt0106598", "tmdb": "9612"},
+    {"title": "Nacho Libre", "year": 2006, "imdb": "tt0457510", "tmdb": "9353"},
+    {"title": "Jackass: Best and Last", "year": 2026, "imdb": "tt9999901", "tmdb": "999901"},
+    {"title": "9", "year": 2009, "imdb": "tt0472033", "tmdb": "12244"},
     {"title": "Amélie", "year": 2001, "imdb": "tt0211915", "tmdb": "194", "original": "Le Fabuleux Destin d'Amélie Poulain"},
 ]
 # A small amber PNG, standing in for a poster
@@ -57,7 +61,11 @@ class FakePlex:
         names = [os.path.basename(path)] + ([] if folder == self.root else [os.path.basename(folder)])
         for n in names:
             got = naming.parse_release(n)
-            if not got:
+            if not got:  # no year in the name: Plex still matches on the title alone
+                t = naming.split_ext(n)[0] if naming.is_video(n) else n
+                hit = [c for c in CATALOG if naming.fold(c["title"]) == naming.fold(t)]
+                if len(hit) == 1:
+                    return hit[0]
                 continue
             t, y = got
             for c in CATALOG:

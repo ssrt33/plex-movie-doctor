@@ -81,6 +81,7 @@ def _publish(res, libs):
         st["seen"] = [i["id"] for i in res["issues"]]
         st["movies"] = res["movies"]
         st["stale"] = res["stale"]
+        st["layout_used"] = res.get("layout")
         st["missing_example"] = res["missing"][0] if res["missing"] else None
         st["suggest_map"] = paths.suggest_map(res["missing"], paths.mounts()) \
             if res["missing"] and res["stale"] >= res["movies"] / 2 else None
@@ -136,7 +137,7 @@ def fix_issue(issue_id, keep=None):
             store.get()["scan"]["running"] = False
         _run_lock.release()
         if issue["kind"] != "artwork":
-            wake(later=45)  # give Plex a moment to pick up the move, then look again
+            wake(later=120)  # once you've stopped clicking for a bit (and Plex has caught up), look again
 
 
 def undo(entry_id, force=False):
@@ -155,9 +156,10 @@ def undo(entry_id, force=False):
                 if h["id"] == entry_id:
                     h["undone"] = True
                     h["undone_at"] = time.time()
-            # It'll show up again on the next scan; ignore it so it doesn't nag straight away.
-            store.get()["ignored"][entry["issue"]] = {"summary": entry["summary"], "kind": entry["kind"],
-                                                      "at": time.time(), "reason": "You undid this fix."}
+            if entry.get("issue"):
+                # It'll show up again on the next scan; ignore it so it doesn't nag straight away.
+                store.get()["ignored"][entry["issue"]] = {"summary": entry["summary"], "kind": entry["kind"],
+                                                          "at": time.time(), "reason": "You undid this fix."}
             store.save()
     finally:
         with store.lock():
@@ -183,13 +185,78 @@ def ignore(issue_id, on=True):
         store.save()
 
 
+_later = None
+
+
 def wake(later=0):
+    """Scan now, or `later` seconds after the last call (so clicking through fixes doesn't
+    set off a full scan after each one)."""
+    global _later
+    if _later:
+        _later.cancel()
+        _later = None
     if later:
-        t = threading.Timer(later, _wake.set)
-        t.daemon = True
-        t.start()
+        _later = threading.Timer(later, _wake.set)
+        _later.daemon = True
+        _later.start()
     else:
         _wake.set()
+
+
+BULK_KINDS = ("rename", "artwork", "junk")  # simple, one-movie-at-a-time fixes
+
+
+def fix_many(kind):
+    """"Fix all" for one kind (only from the page). One history entry, one Undo for the lot."""
+    if kind not in BULK_KINDS:
+        raise fixes.FixError("That kind of fix has to be done one at a time.")
+    with store.lock():
+        todo = [i for i in store.get()["issues"] if i["kind"] == kind and i["fix"] and not i.get("ignored")]
+    if not todo:
+        raise LookupError
+    if not _run_lock.acquire(blocking=False):
+        raise fixes.FixError("A scan or another fix is still running. Try again in a moment.")
+    plex = Plex()
+    recs, done, failed, plan = [], [], [], []
+    try:
+        fixes.defer_refresh()
+        for n, issue in enumerate(todo, 1):
+            _step(f"Fixing {n} of {len(todo)}: {issue['summary']}")
+            try:
+                recs.append(fixes.apply(plex, issue))
+                done.append(issue)
+                ch = issue["changes"][0] if issue["changes"] and not issue["changes"][0].get("image") else None
+                plan.append(f"{ch['before']} → {ch['after']}" if ch else issue["summary"])
+            except Exception as e:  # skip this one, carry on with the rest
+                failed.append(f"{issue['summary']}: {e}")
+        _step("Telling Plex")
+        fixes.flush_refresh(plex)
+        label = checks.KINDS[kind][1]
+        with store.lock():
+            st = store.get()
+            if recs:
+                if len(plan) > 400:
+                    plan = plan[:400] + [f"…and {len(plan) - 400} more"]
+                entry = {"id": uuid.uuid4().hex[:10], "issue": "", "kind": kind, "batch": True,
+                         "summary": f"{label}: fixed {len(recs)}", "plan": plan,
+                         "record": {"type": "batch", "records": recs}, "undone": False, "at": time.time()}
+                st["history"].insert(0, entry)
+                del st["history"][500:]
+            gone = {i["id"] for i in done}
+            st["issues"] = [i for i in st["issues"] if i["id"] not in gone and
+                            (kind == "artwork" or not any(_overlaps(i, d) for d in done))]
+            st["last_bulk"] = {"kind": kind, "fixed": len(recs), "failed": failed[:20], "failed_n": len(failed),
+                               "at": time.time()}
+            store.save()
+        return {"fixed": len(recs), "failed": failed}
+    finally:
+        fixes.flush_refresh(plex) if fixes._deferred is not None else None
+        with store.lock():
+            store.get()["scan"]["running"] = False
+            store.get()["scan"]["step"] = ""
+        _run_lock.release()
+        if kind != "artwork":
+            wake(later=120)
 
 
 def scheduler():
